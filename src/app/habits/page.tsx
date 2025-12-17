@@ -1,18 +1,52 @@
 "use client";
 
-import { CheckSquare } from "lucide-react";
-
-const habits = [
-    "5 Hours Deep Work",
-    "Post on Instagram",
-    "Post on LinkedIn/Twitter",
-    "Workout (45m+)",
-    "No Sugar / Clean Diet",
-    "Read 10 Pages",
-    "Plan Tomorrow"
-];
+import { useEffect, useState } from "react";
+import { CheckSquare, Check } from "lucide-react";
+import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export default function HabitsPage() {
+    const [habits, setHabits] = useState<any[]>([]);
+    const [completedHabits, setCompletedHabits] = useState<string[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    async function loadData() {
+        try {
+            const [habitsData, logsData] = await Promise.all([
+                api.getHabits(),
+                api.getHabitLogs()
+            ]);
+            setHabits(habitsData);
+            setCompletedHabits(logsData);
+        } catch (e) {
+            console.error("Failed to load habits", e);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleToggle(id: string) {
+        const isCompleted = completedHabits.includes(id);
+        try {
+            await api.toggleHabit(id, !isCompleted);
+            if (isCompleted) {
+                setCompletedHabits(prev => prev.filter(h => h !== id));
+            } else {
+                setCompletedHabits(prev => [...prev, id]);
+            }
+        } catch (e) {
+            console.error("Failed to toggle habit", e);
+        }
+    }
+
+    if (loading) return <div className="text-slate-500 p-8">Loading Habits...</div>;
+
+    const progress = habits.length > 0 ? (completedHabits.length / habits.length) * 100 : 0;
+
     return (
         <div className="max-w-3xl mx-auto space-y-8">
             <div>
@@ -27,20 +61,36 @@ export default function HabitsPage() {
                 </div>
 
                 <div className="space-y-4">
-                    {habits.map((habit, idx) => (
-                        <div key={idx} className="flex items-center gap-4 p-4 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-purple-500/50 transition-all cursor-pointer group">
-                            <div className="w-6 h-6 rounded border-2 border-slate-600 group-hover:border-purple-500 transition-colors flex items-center justify-center">
-                                {/* Checkbox state logic pending Supabase */}
+                    {habits.map((habit) => {
+                        const isDone = completedHabits.includes(habit.id);
+                        return (
+                            <div key={habit.id}
+                                onClick={() => handleToggle(habit.id)}
+                                className={cn(
+                                    "flex items-center gap-4 p-4 rounded-xl border transition-all cursor-pointer group select-none",
+                                    isDone ? "bg-purple-900/20 border-purple-500/50" : "bg-slate-900/40 border-slate-800 hover:border-purple-500/50"
+                                )}>
+                                <div className={cn(
+                                    "w-6 h-6 rounded border-2 flex items-center justify-center transition-colors",
+                                    isDone ? "bg-purple-500 border-purple-500" : "border-slate-600 group-hover:border-purple-500"
+                                )}>
+                                    {isDone && <Check className="w-4 h-4 text-white" />}
+                                </div>
+                                <span className={cn("text-lg font-medium transition-colors", isDone ? "text-white" : "text-slate-300 group-hover:text-white")}>
+                                    {habit.title}
+                                </span>
                             </div>
-                            <span className="text-lg text-slate-300 group-hover:text-white transition-colors font-medium">{habit}</span>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 <div className="mt-8 pt-8 border-t border-slate-800 text-center">
-                    <p className="text-slate-500 mb-4">Completed 0/7 habits today</p>
+                    <p className="text-slate-500 mb-4">Completed {completedHabits.length}/{habits.length} habits today</p>
                     <div className="w-full bg-slate-800 rounded-full h-2">
-                        <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full w-[0%]" />
+                        <div
+                            className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${progress}%` }}
+                        />
                     </div>
                 </div>
             </div>

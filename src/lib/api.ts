@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 
 // Shared User ID for valid Foreign Key constraints if tables require it.
 // Using a specific UUID allows all "anon" visitors to act as this single user.
-const GLOBAL_USER_ID = '00000000-0000-0000-0000-000000000000';
+const GLOBAL_USER_ID = 'c0673df5-704f-4599-884f-478ead570689';
 
 export interface DailyMetric {
     revenue: number;

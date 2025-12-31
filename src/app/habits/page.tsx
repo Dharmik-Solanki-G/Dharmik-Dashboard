@@ -8,21 +8,14 @@ import { HabitList } from "@/components/habits/HabitList";
 import { HabitProgressChart } from "@/components/habits/HabitProgressChart";
 
 export default function HabitsPage() {
-    const [user, setUser] = useState<any>(null);
     const [habits, setHabits] = useState<Habit[]>([]);
     const [logs, setLogs] = useState<HabitLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
-        checkUser();
-    }, []);
-
-    async function checkUser() {
-        const { data: { user } } = await api.getUser();
-        setUser(user);
         loadData();
-    }
+    }, []);
 
     async function loadData() {
         try {
@@ -57,15 +50,8 @@ export default function HabitsPage() {
         }
     }
 
-    if (!loading && !user) {
-        return (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
-                <h2 className="text-2xl font-bold text-white">Log In Required</h2>
-                <p className="text-slate-400">Please sign in to access your Habit Tracker.</p>
-                <a href="/login" className="px-6 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-500">Sign In</a>
-            </div>
-        );
-    }
+    // Auth check removed
+
 
     // Refresh function
     async function refreshLogs() {

@@ -52,13 +52,7 @@ export function Sidebar() {
                 </div>
 
                 <div className="p-4 border-t border-slate-800 space-y-2">
-                    <div className="px-4 py-2">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Account</p>
-                        <Link href="/profile" className="flex items-center gap-3 text-sm font-medium text-slate-400 hover:text-white transition-colors">
-                            <User className="w-4 h-4" />
-                            Profile
-                        </Link>
-                    </div>
+                    {/* Account section removed */}
                 </div>
             </div>
         </div>

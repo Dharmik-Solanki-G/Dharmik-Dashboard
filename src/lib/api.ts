@@ -1,10 +1,9 @@
-import { supabase } from './supabaseClient';
-
 export interface DailyMetric {
     revenue: number;
     followers_ig: number;
     followers_yt: number;
     products_live: number;
+    date: string;
 }
 
 export interface RoadmapMonth {
@@ -13,6 +12,7 @@ export interface RoadmapMonth {
     title: string;
     focus_area: string;
     revenue_target: string;
+    status: 'pending' | 'current' | 'done';
     weeks: RoadmapWeek[];
 }
 
@@ -21,6 +21,7 @@ export interface RoadmapWeek {
     week_number: number;
     title: string;
     status: 'pending' | 'current' | 'done';
+    month_id: string;
     learn_items: string[];
     build_items: string[];
 }
@@ -69,327 +70,290 @@ export interface JournalEntry {
     created_at: string;
 }
 
+export interface Todo {
+    id: string;
+    title: string;
+    is_priority: boolean;
+    is_done: boolean;
+    date: string;
+    created_at: string;
+}
+
+// Helper for LocalStorage
+const Storage = {
+    get: (key: string) => {
+        if (typeof window === 'undefined') return null;
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : null;
+    },
+    set: (key: string, value: any) => {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem(key, JSON.stringify(value));
+    },
+    // SEED DATA if empty
+    init: () => {
+        if (typeof window === 'undefined') return;
+
+        if (!localStorage.getItem('roadmap_data')) {
+            const initialRoadmap: RoadmapMonth[] = [
+                {
+                    id: 'm1', month_number: 1, title: 'Month 1: Foundation', focus_area: 'TypeScript, Next.js, Multi-Agent Systems', revenue_target: '₹50K', status: 'current',
+                    weeks: [
+                        { id: 'w1', week_number: 1, title: 'TypeScript Foundations + LLM Tooling', status: 'current', month_id: 'm1', learn_items: [], build_items: [] },
+                        { id: 'w2', week_number: 2, title: 'Next.js App Router + Auth', status: 'pending', month_id: 'm1', learn_items: [], build_items: [] },
+                        { id: 'w3', week_number: 3, title: 'Supabase & Database Design', status: 'pending', month_id: 'm1', learn_items: [], build_items: [] },
+                        { id: 'w4', week_number: 4, title: 'MVP Development', status: 'pending', month_id: 'm1', learn_items: [], build_items: [] }
+                    ]
+                }
+            ];
+            localStorage.setItem('roadmap_data', JSON.stringify(initialRoadmap));
+        }
+
+        if (!localStorage.getItem('daily_metrics')) {
+            localStorage.setItem('daily_metrics', JSON.stringify([]));
+        }
+        if (!localStorage.getItem('habits')) {
+            localStorage.setItem('habits', JSON.stringify([]));
+        }
+        if (!localStorage.getItem('habit_logs')) {
+            localStorage.setItem('habit_logs', JSON.stringify([]));
+        }
+        if (!localStorage.getItem('journal_entries')) {
+            localStorage.setItem('journal_entries', JSON.stringify([]));
+        }
+        if (!localStorage.getItem('schedule_logs')) {
+            localStorage.setItem('schedule_logs', JSON.stringify([]));
+        }
+        if (!localStorage.getItem('todos')) {
+            localStorage.setItem('todos', JSON.stringify([]));
+        }
+    }
+};
+
+// Initialize on load (client-side only check inside methods usually, but we can rely on components calling API)
+
 export const api = {
     // --- METRICS ---
     getUser: async () => {
-        return await supabase.auth.getUser();
+        // Mock user for auth checks
+        return { data: { user: { id: 'local-user', email: 'user@local' } } };
     },
 
     getMetrics: async () => {
-        const { data, error } = await supabase
-            .from('daily_metrics')
-            .select('*')
-            .order('date', { ascending: false })
-            .limit(1)
-            .maybeSingle(); // Prevent error if table is empty
-
-        if (error) {
-            console.error(' Supabase error fetching metrics:', error.message, error.details);
-            return null; // Return null instead of throwing or undefined
-        }
-        return data;
+        Storage.init();
+        const metrics = Storage.get('daily_metrics') || [];
+        // Return latest by date
+        return metrics.sort((a: DailyMetric, b: DailyMetric) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] || null;
     },
 
-    updateMetrics: async (metrics: Partial<DailyMetric>) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("User not authenticated");
-
+    updateMetrics: async (updates: Partial<DailyMetric>) => {
+        Storage.init();
+        const metrics = Storage.get('daily_metrics') || [];
         const date = new Date().toISOString().split('T')[0];
-        // Upsert for today
-        const { data, error } = await supabase
-            .from('daily_metrics')
-            .upsert({ ...metrics, date, user_id: user.id }, { onConflict: 'date' })
-            .select()
-            .single();
 
-        if (error) throw error;
-        return data;
+        const existingIndex = metrics.findIndex((m: DailyMetric) => m.date === date);
+        let newData;
+        if (existingIndex >= 0) {
+            metrics[existingIndex] = { ...metrics[existingIndex], ...updates };
+            newData = metrics[existingIndex];
+        } else {
+            newData = { ...updates, date, revenue: 0, followers_ig: 0, products_live: 0, followers_yt: 0 };
+            metrics.push(newData);
+        }
+
+        Storage.set('daily_metrics', metrics);
+        return newData;
     },
 
     // --- ROADMAP ---
     getRoadmap: async () => {
-        const { data: months, error: monthsError } = await supabase
-            .from('roadmap_months')
-            .select('*')
-            .order('month_number', { ascending: true });
-
-        if (monthsError) {
-            console.error('Error fetching roadmap months:', monthsError.message);
-            return [];
-        }
-
-        const { data: weeks, error: weeksError } = await supabase
-            .from('roadmap_weeks')
-            .select('*')
-            .order('week_number', { ascending: true });
-
-        if (weeksError) {
-            console.error('Error fetching roadmap weeks:', weeksError.message);
-            return [];
-        }
-
-        // Nest weeks into months
-        return months.map((month: any) => ({
-            ...month,
-            weeks: weeks.filter((week: any) => week.month_id === month.id)
-        }));
+        Storage.init();
+        const months = Storage.get('roadmap_data') || [];
+        return months;
     },
 
     updateRoadmapMonth: async (id: string, updates: Partial<RoadmapMonth>) => {
-        const { error } = await supabase
-            .from('roadmap_months')
-            .update(updates)
-            .eq('id', id);
-
-        if (error) throw error;
+        Storage.init();
+        const months = Storage.get('roadmap_data') || [];
+        const index = months.findIndex((m: RoadmapMonth) => m.id === id);
+        if (index >= 0) {
+            months[index] = { ...months[index], ...updates };
+            Storage.set('roadmap_data', months);
+        }
     },
 
     // --- PLANNER ---
     getSchedule: async () => {
-        const { data, error } = await supabase
-            .from('schedule_slots')
-            .select('*')
-            .order('start_time', { ascending: true });
-
-        if (error) console.error('Error fetching schedule:', error);
-        return data || [];
+        // Static schedule for now, or could make editable later
+        return [
+            { id: '1', start_time: '06:00', end_time: '07:00', activity: 'Morning Routine', type: 'health' },
+            { id: '2', start_time: '07:00', end_time: '09:00', activity: 'Deep Work (Coding)', type: 'work' },
+            { id: '3', start_time: '18:00', end_time: '19:00', activity: 'Gym', type: 'health' },
+        ];
     },
 
     getTodos: async (date: string = new Date().toISOString().split('T')[0]) => {
-        const { data, error } = await supabase
-            .from('todos')
-            .select('*')
-            .eq('date', date)
-            .order('created_at', { ascending: true });
-
-        if (error) console.error('Error fetching todos:', error);
-        return data || [];
+        Storage.init();
+        const todos = Storage.get('todos') || [];
+        return todos.filter((t: Todo) => t.date === date);
     },
 
     addTodo: async (title: string, isPriority: boolean = false) => {
-        const { data, error } = await supabase
-            .from('todos')
-            .insert([{ title, is_priority: isPriority, date: new Date() }])
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data;
+        Storage.init();
+        const todos = Storage.get('todos') || [];
+        const newTodo = {
+            id: Math.random().toString(36).substr(2, 9),
+            title,
+            is_priority: isPriority,
+            is_done: false,
+            date: new Date().toISOString().split('T')[0],
+            created_at: new Date().toISOString()
+        };
+        todos.push(newTodo);
+        Storage.set('todos', todos);
+        return newTodo;
     },
 
     toggleTodo: async (id: string, isDone: boolean) => {
-        const { error } = await supabase
-            .from('todos')
-            .update({ is_done: isDone })
-            .eq('id', id);
-
-        if (error) throw error;
+        Storage.init();
+        const todos = Storage.get('todos') || [];
+        const index = todos.findIndex((t: Todo) => t.id === id);
+        if (index >= 0) {
+            todos[index].is_done = isDone;
+            Storage.set('todos', todos);
+        }
     },
 
     // --- SCHEDULE LOGS ---
     getScheduleLogs: async (date: string = new Date().toISOString().split('T')[0]) => {
-        const { data, error } = await supabase
-            .from('schedule_logs')
-            .select('slot_id')
-            .eq('date', date);
-
-        if (error) console.error('Error fetching schedule logs:', error);
-        return data?.map((log: { slot_id: string }) => log.slot_id) || [];
+        Storage.init();
+        const logs = Storage.get('schedule_logs') || [];
+        return logs.filter((l: any) => l.date === date).map((l: any) => l.slot_id);
     },
 
     toggleScheduleSlot: async (slotId: string, isCompleted: boolean) => {
+        Storage.init();
+        let logs = Storage.get('schedule_logs') || [];
         const date = new Date().toISOString().split('T')[0];
+
         if (isCompleted) {
-            const { error } = await supabase
-                .from('schedule_logs')
-                .insert([{ slot_id: slotId, date }]);
-            if (error) throw error;
+            if (!logs.find((l: any) => l.slot_id === slotId && l.date === date)) {
+                logs.push({ slot_id: slotId, date });
+            }
         } else {
-            const { error } = await supabase
-                .from('schedule_logs')
-                .delete()
-                .eq('slot_id', slotId)
-                .eq('date', date);
-            if (error) throw error;
+            logs = logs.filter((l: any) => !(l.slot_id === slotId && l.date === date));
         }
+        Storage.set('schedule_logs', logs);
     },
 
-    // --- HABITS (ENHANCED) ---
+    // --- HABITS ---
     getHabits: async () => {
-        const { data, error } = await supabase
-            .from('habits')
-            .select('*')
-            .order('created_at', { ascending: true });
-
-        if (error) throw error;
-        return data as Habit[] || [];
+        Storage.init();
+        return Storage.get('habits') || [];
     },
 
     createHabit: async (habit: Omit<Habit, 'id' | 'created_at' | 'user_id'>) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("User not authenticated");
-
-        const { data, error } = await supabase
-            .from('habits')
-            .insert([{ ...habit, user_id: user.id }])
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data as Habit;
+        Storage.init();
+        const habits = Storage.get('habits') || [];
+        const newHabit = {
+            ...habit,
+            id: Math.random().toString(36).substr(2, 9),
+            created_at: new Date().toISOString(),
+            user_id: 'local-user'
+        };
+        habits.push(newHabit);
+        Storage.set('habits', habits);
+        return newHabit;
     },
 
     deleteHabit: async (id: string) => {
-        const { error } = await supabase
-            .from('habits')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        Storage.init();
+        let habits = Storage.get('habits') || [];
+        habits = habits.filter((h: Habit) => h.id !== id);
+        Storage.set('habits', habits);
     },
 
     getHabitLogs: async (date?: string) => {
-        let query = supabase.from('habit_logs').select('*');
+        Storage.init();
+        const logs = Storage.get('habit_logs') || [];
         if (date) {
-            query = query.eq('date', date);
+            return logs.filter((l: HabitLog) => l.date === date);
         }
-
-        const { data, error } = await query;
-
-        if (error) throw error;
-        return data as HabitLog[] || [];
+        return logs;
     },
 
     updateHabitLog: async (habitId: string, value: number, completed: boolean) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("User not authenticated");
-
+        Storage.init();
+        let logs = Storage.get('habit_logs') || [];
         const date = new Date().toISOString().split('T')[0];
-        // Upsert log
-        const { data, error } = await supabase
-            .from('habit_logs')
-            .upsert(
-                { habit_id: habitId, date, value, completed, user_id: user.id },
-                { onConflict: 'habit_id,date' }
-            )
-            .select()
-            .single();
+        const index = logs.findIndex((l: HabitLog) => l.habit_id === habitId && l.date === date);
 
-        if (error) throw error;
-        return data as HabitLog;
+        let log;
+        if (index >= 0) {
+            logs[index] = { ...logs[index], value, completed };
+            log = logs[index];
+        } else {
+            log = {
+                id: Math.random().toString(36).substr(2, 9),
+                habit_id: habitId,
+                date,
+                value,
+                completed,
+                user_id: 'local-user'
+            };
+            logs.push(log);
+        }
+        Storage.set('habit_logs', logs);
+        return log;
     },
 
     toggleHabit: async (habitId: string, isCompleted: boolean) => {
-        // Legacy support or simple toggle wrapper
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("User not authenticated");
-
-        const date = new Date().toISOString().split('T')[0];
-        const { error } = await supabase
-            .from('habit_logs')
-            .upsert(
-                { habit_id: habitId, date, completed: isCompleted, value: isCompleted ? 1 : 0, user_id: user.id },
-                { onConflict: 'habit_id,date' }
-            );
-        if (error) throw error;
+        await api.updateHabitLog(habitId, isCompleted ? 1 : 0, isCompleted);
     },
 
     // --- JOURNAL ---
     getJournalEntries: async () => {
-        const { data, error } = await supabase
-            .from('journal_entries')
-            .select('*')
-            .order('date', { ascending: false });
-
-        if (error) throw error;
-        return data as JournalEntry[] || [];
+        Storage.init();
+        const entries = Storage.get('journal_entries') || [];
+        return entries.sort((a: JournalEntry, b: JournalEntry) => new Date(b.date).getTime() - new Date(a.date).getTime());
     },
 
     getJournalEntry: async (date: string) => {
-        const { data, error } = await supabase
-            .from('journal_entries')
-            .select('*')
-            .eq('date', date)
-            .maybeSingle();
-
-        if (error) throw error;
-        return data as JournalEntry | null;
+        Storage.init();
+        const entries = Storage.get('journal_entries') || [];
+        return entries.find((e: JournalEntry) => e.date === date) || null;
     },
 
     saveJournalEntry: async (entry: Partial<JournalEntry> & { date: string }) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("User not authenticated");
+        Storage.init();
+        let entries = Storage.get('journal_entries') || [];
+        const index = entries.findIndex((e: JournalEntry) => e.date === entry.date);
 
-        // Remove undefined fields
-        const cleanEntry = Object.fromEntries(
-            Object.entries(entry).filter(([_, v]) => v !== undefined)
-        );
-
-        const { data, error } = await supabase
-            .from('journal_entries')
-            .upsert({ ...cleanEntry, user_id: user.id }, { onConflict: 'date,user_id' } as any)
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data as JournalEntry;
-    },
-
-    // --- PRODUCTIVITY TRACKING ---
-    getProductivityStats: async () => {
-        try {
-            // Get streak
-            const { data: streakData } = await supabase.rpc('calculate_streak');
-
-            // Get week progress
-            const { data: weekData } = await supabase.rpc('calculate_week_progress');
-
-            // Get today's stats
-            const today = new Date().toISOString().split('T')[0];
-            const { data: todayData } = await supabase
-                .from('daily_activity_logs')
-                .select('*')
-                .eq('date', today)
-                .maybeSingle();
-
-            return {
-                streak: streakData || 0,
-                weekProgress: weekData || 0,
-                todayScore: todayData?.productivity_score || 0,
-                todayGrade: todayData?.productivity_score
-                    ? (todayData.productivity_score >= 0.90 ? 'A+' :
-                        todayData.productivity_score >= 0.80 ? 'A' :
-                            todayData.productivity_score >= 0.70 ? 'B+' :
-                                todayData.productivity_score >= 0.60 ? 'B' :
-                                    todayData.productivity_score >= 0.50 ? 'C+' : 'C')
-                    : 'N/A'
+        let saved;
+        if (index >= 0) {
+            entries[index] = { ...entries[index], ...entry };
+            saved = entries[index];
+        } else {
+            saved = {
+                ...entry,
+                id: Math.random().toString(36).substr(2, 9),
+                created_at: new Date().toISOString(),
+                user_id: 'local-user'
             };
-        } catch (error) {
-            console.error('Error fetching productivity stats:', error);
-            return { streak: 0, weekProgress: 0, todayScore: 0, todayGrade: 'N/A' };
+            entries.push(saved);
         }
+        Storage.set('journal_entries', entries);
+        return saved;
     },
 
-    updateDailyActivity: async (
-        scheduleCompleted: number,
-        scheduleTotal: number,
-        tasksCompleted: number,
-        tasksTotal: number,
-        focusTimeSeconds: number
-    ) => {
-        const today = new Date().toISOString().split('T')[0];
+    // --- PRODUCTIVITY ---
+    getProductivityStats: async () => {
+        // Calculated locally if possible, or mocked for now since strict logic was in RPC
+        // Implementation of streak locally would require logic
+        return { streak: 0, weekProgress: 0, todayScore: 0, todayGrade: 'N/A' };
+    },
 
-        try {
-            await supabase.rpc('update_daily_activity', {
-                p_date: today,
-                p_schedule_completed: scheduleCompleted,
-                p_schedule_total: scheduleTotal,
-                p_tasks_completed: tasksCompleted,
-                p_tasks_total: tasksTotal,
-                p_focus_time_seconds: focusTimeSeconds
-            });
-        } catch (error) {
-            console.error('Error updating daily activity:', error);
-        }
+    updateDailyActivity: async () => {
+        // No-op for now in local mode or implement later
     }
 };

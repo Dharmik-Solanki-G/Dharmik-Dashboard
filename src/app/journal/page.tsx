@@ -33,24 +33,15 @@ export default function JournalPage() {
 
     async function loadData() {
         try {
-            const [fetchedHabits, fetchedLogs] = await Promise.all([
+            const [fetchedHabits, fetchedLogs, fetchedEntries] = await Promise.all([
                 api.getHabits(),
-                // Fetch all logs to support selecting different dates
-                api.getHabitLogs()
+                api.getHabitLogs(),
+                api.getJournalEntries()
             ]);
 
-            // We also need all journal entries. I didn't verify `api.getJournalEntry`. 
-            // `api.getJournalEntry` fetches SINGLE by date.
-            // I need `getJournalEntries`.
-            // I'll add a temporary function here or use direct supabase if possible, but adhering to pattern I should use `api`.
-            // I'll assume I need to fetch a range of entries for the calendar. 
-            // Since I haven't added `getJournalEntries(range)` to API yet, I will simulate it 
-            // by just fetching TODAY's entry for the form, and empty array for calendar for now,
-            // OR I will fetch all entries if possible.
-            // Let's modify API in next step to get all entries. 
-            // For now, I'll fetch today's.
-            const todayEntry = await api.getJournalEntry(format(new Date(), 'yyyy-MM-dd'));
-            if (todayEntry) setEntries([todayEntry]);
+            if (fetchedEntries.length > 0) {
+                setEntries(fetchedEntries);
+            }
 
             setHabits(fetchedHabits);
             setLogs(fetchedLogs);

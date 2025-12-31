@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DollarSign, Users, TrendingUp } from "lucide-react";
+import { DollarSign, Users, TrendingUp, CheckSquare } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { api, DailyMetric } from "@/lib/api";
 
@@ -47,6 +47,31 @@ export default function ProgressPage() {
             <div>
                 <h1 className="text-3xl font-bold">Growth Analytics</h1>
                 <p className="text-slate-400 mt-2">Tracking the journey to ₹10L/month.</p>
+            </div>
+
+            {/* Habit Analytics */}
+            <div className="glass-panel p-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <CheckSquare className="w-5 h-5 text-purple-400" />
+                    Habit Consistency
+                </h2>
+                <div className="grid md:grid-cols-3 gap-6">
+                    <div className="p-4 bg-slate-900/50 rounded-lg">
+                        <p className="text-sm text-slate-400">Completion Rate</p>
+                        <p className="text-2xl font-bold text-white mt-1">
+                            {metrics ? '85%' : '0%'}
+                            <span className="text-xs text-slate-500 font-normal ml-2">Mock Data</span>
+                        </p>
+                    </div>
+                    <div className="p-4 bg-slate-900/50 rounded-lg">
+                        <p className="text-sm text-slate-400">Longest Streak</p>
+                        <p className="text-2xl font-bold text-white mt-1">12 Days</p>
+                    </div>
+                    <div className="p-4 bg-slate-900/50 rounded-lg">
+                        <p className="text-sm text-slate-400">Total Habits</p>
+                        <p className="text-2xl font-bold text-white mt-1">5 Active</p>
+                    </div>
+                </div>
             </div>
 
             <div className="grid lg:grid-cols-2 gap-8">

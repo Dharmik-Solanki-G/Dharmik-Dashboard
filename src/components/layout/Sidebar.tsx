@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Map, Calendar, CheckSquare, Settings, LogOut, TrendingUp, User } from "lucide-react";
+import { Home, Map, Calendar, CheckSquare, Settings, LogOut, TrendingUp, User, Book } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
     { name: "Overview", href: "/", icon: Home },
     { name: "Roadmap", href: "/roadmap", icon: Map },
     { name: "Daily Planner", href: "/planner", icon: Calendar },
-    { name: "Progress", href: "/progress", icon: TrendingUp },
+    { name: "Analytics", href: "/progress", icon: TrendingUp },
     { name: "Habits", href: "/habits", icon: CheckSquare },
+    { name: "Journal", href: "/journal", icon: Book },
 ];
 
 export function Sidebar() {

@@ -5,14 +5,15 @@ import { useState } from "react";
 import { Sidebar } from "./Sidebar"; // Reuse logic or simpler version for mobile
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Home, Map, Calendar, CheckSquare, TrendingUp } from "lucide-react";
+import { Home, Map, Calendar, CheckSquare, TrendingUp, Book } from "lucide-react";
 
 // Simplified Mobile Navigation
 const mobileNav = [
     { name: "Home", href: "/", icon: Home },
     { name: "Plan", href: "/planner", icon: Calendar },
     { name: "Map", href: "/roadmap", icon: Map },
-    { name: "Stats", href: "/progress", icon: TrendingUp },
+    { name: "Analytics", href: "/progress", icon: TrendingUp },
+    { name: "Journal", href: "/journal", icon: Book },
 ];
 
 export function Navbar() {

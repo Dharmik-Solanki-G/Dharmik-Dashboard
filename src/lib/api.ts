@@ -34,8 +34,47 @@ export interface ScheduleSlot {
     category: string;
 }
 
+export interface Habit {
+    id: string;
+    user_id: string;
+    title: string;
+    description?: string;
+    icon?: string;
+    goal_frequency: 'daily' | 'weekly' | 'monthly';
+    target_value: number;
+    unit?: string;
+    created_at: string;
+}
+
+export interface HabitLog {
+    id: string;
+    habit_id: string;
+    user_id: string;
+    date: string;
+    value: number;
+    completed: boolean;
+}
+
+export interface JournalEntry {
+    id: string;
+    user_id: string;
+    date: string;
+    mood: string;
+    grateful_for: string[];
+    highlights: string;
+    challenges: string;
+    learnings: string;
+    goals_tomorrow: string;
+    notes: string;
+    created_at: string;
+}
+
 export const api = {
     // --- METRICS ---
+    getUser: async () => {
+        return await supabase.auth.getUser();
+    },
+
     getMetrics: async () => {
         const { data, error } = await supabase
             .from('daily_metrics')
@@ -48,6 +87,22 @@ export const api = {
             console.error(' Supabase error fetching metrics:', error.message, error.details);
             return null; // Return null instead of throwing or undefined
         }
+        return data;
+    },
+
+    updateMetrics: async (metrics: Partial<DailyMetric>) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("User not authenticated");
+
+        const date = new Date().toISOString().split('T')[0];
+        // Upsert for today
+        const { data, error } = await supabase
+            .from('daily_metrics')
+            .upsert({ ...metrics, date, user_id: user.id }, { onConflict: 'date' })
+            .select()
+            .single();
+
+        if (error) throw error;
         return data;
     },
 
@@ -74,10 +129,19 @@ export const api = {
         }
 
         // Nest weeks into months
-        return months.map(month => ({
+        return months.map((month: any) => ({
             ...month,
-            weeks: weeks.filter(week => week.month_id === month.id)
+            weeks: weeks.filter((week: any) => week.month_id === month.id)
         }));
+    },
+
+    updateRoadmapMonth: async (id: string, updates: Partial<RoadmapMonth>) => {
+        const { error } = await supabase
+            .from('roadmap_months')
+            .update(updates)
+            .eq('id', id);
+
+        if (error) throw error;
     },
 
     // --- PLANNER ---
@@ -130,7 +194,7 @@ export const api = {
             .eq('date', date);
 
         if (error) console.error('Error fetching schedule logs:', error);
-        return data?.map(log => log.slot_id) || [];
+        return data?.map((log: { slot_id: string }) => log.slot_id) || [];
     },
 
     toggleScheduleSlot: async (slotId: string, isCompleted: boolean) => {
@@ -150,7 +214,7 @@ export const api = {
         }
     },
 
-    // --- HABITS ---
+    // --- HABITS (ENHANCED) ---
     getHabits: async () => {
         const { data, error } = await supabase
             .from('habits')
@@ -158,34 +222,117 @@ export const api = {
             .order('created_at', { ascending: true });
 
         if (error) throw error;
-        return data || [];
+        return data as Habit[] || [];
     },
 
-    getHabitLogs: async (date: string = new Date().toISOString().split('T')[0]) => {
+    createHabit: async (habit: Omit<Habit, 'id' | 'created_at' | 'user_id'>) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("User not authenticated");
+
         const { data, error } = await supabase
-            .from('habit_logs')
-            .select('habit_id')
-            .eq('date', date);
+            .from('habits')
+            .insert([{ ...habit, user_id: user.id }])
+            .select()
+            .single();
 
         if (error) throw error;
-        return data?.map(log => log.habit_id) || [];
+        return data as Habit;
+    },
+
+    deleteHabit: async (id: string) => {
+        const { error } = await supabase
+            .from('habits')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    },
+
+    getHabitLogs: async (date?: string) => {
+        let query = supabase.from('habit_logs').select('*');
+        if (date) {
+            query = query.eq('date', date);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+        return data as HabitLog[] || [];
+    },
+
+    updateHabitLog: async (habitId: string, value: number, completed: boolean) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("User not authenticated");
+
+        const date = new Date().toISOString().split('T')[0];
+        // Upsert log
+        const { data, error } = await supabase
+            .from('habit_logs')
+            .upsert(
+                { habit_id: habitId, date, value, completed, user_id: user.id },
+                { onConflict: 'habit_id,date' }
+            )
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as HabitLog;
     },
 
     toggleHabit: async (habitId: string, isCompleted: boolean) => {
+        // Legacy support or simple toggle wrapper
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("User not authenticated");
+
         const date = new Date().toISOString().split('T')[0];
-        if (isCompleted) {
-            const { error } = await supabase
-                .from('habit_logs')
-                .insert([{ habit_id: habitId, date }]);
-            if (error) throw error;
-        } else {
-            const { error } = await supabase
-                .from('habit_logs')
-                .delete()
-                .eq('habit_id', habitId)
-                .eq('date', date);
-            if (error) throw error;
-        }
+        const { error } = await supabase
+            .from('habit_logs')
+            .upsert(
+                { habit_id: habitId, date, completed: isCompleted, value: isCompleted ? 1 : 0, user_id: user.id },
+                { onConflict: 'habit_id,date' }
+            );
+        if (error) throw error;
+    },
+
+    // --- JOURNAL ---
+    getJournalEntries: async () => {
+        const { data, error } = await supabase
+            .from('journal_entries')
+            .select('*')
+            .order('date', { ascending: false });
+
+        if (error) throw error;
+        return data as JournalEntry[] || [];
+    },
+
+    getJournalEntry: async (date: string) => {
+        const { data, error } = await supabase
+            .from('journal_entries')
+            .select('*')
+            .eq('date', date)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data as JournalEntry | null;
+    },
+
+    saveJournalEntry: async (entry: Partial<JournalEntry> & { date: string }) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("User not authenticated");
+
+        // Remove undefined fields
+        const cleanEntry = Object.fromEntries(
+            Object.entries(entry).filter(([_, v]) => v !== undefined)
+        );
+
+        const { data, error } = await supabase
+            .from('journal_entries')
+            .upsert({ ...cleanEntry, user_id: user.id }, { onConflict: 'date,user_id' } as any)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as JournalEntry;
     },
 
     // --- PRODUCTIVITY TRACKING ---
@@ -203,7 +350,7 @@ export const api = {
                 .from('daily_activity_logs')
                 .select('*')
                 .eq('date', today)
-                .single();
+                .maybeSingle();
 
             return {
                 streak: streakData || 0,

@@ -1,17 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, DollarSign, Users, Calendar, ArrowUpRight, CheckCircle2 } from "lucide-react";
+import { Activity, DollarSign, Users, Calendar, ArrowUpRight, CheckCircle2, Edit2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api, DailyMetric, RoadmapMonth, RoadmapWeek } from "@/lib/api";
+import { EditMetricsModal } from "@/components/dashboard/EditMetricsModal";
+import { EditMissionModal } from "@/components/dashboard/EditMissionModal";
 
 export default function Home() {
   const [metrics, setMetrics] = useState<DailyMetric | null>(null);
   const [currentMonth, setCurrentMonth] = useState<RoadmapMonth | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showMetricsModal, setShowMetricsModal] = useState(false);
+  const [showMissionModal, setShowMissionModal] = useState(false);
 
   // Time calculations
-  const startDate = new Date("2025-12-17"); // Fixed start date
+  const startDate = new Date("2025-12-31"); // Reset to today as Day 1
   const today = new Date();
   const diffTime = Math.abs(today.getTime() - startDate.getTime());
   const dayNumber = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -26,27 +30,28 @@ export default function Home() {
   ];
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const [metricsData, roadmapData] = await Promise.all([
-          api.getMetrics(),
-          api.getRoadmap()
-        ]);
-
-        if (metricsData) setMetrics(metricsData);
-
-        // Find current month/week logic could be better, defaulting to first active
-        const activeMonth = roadmapData.find((m: any) => m.status === 'current') || roadmapData[0];
-        setCurrentMonth(activeMonth);
-
-      } catch (e) {
-        console.error("Failed to load dashboard data", e);
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchData();
   }, []);
+
+  async function fetchData() {
+    try {
+      const [metricsData, roadmapData] = await Promise.all([
+        api.getMetrics(),
+        api.getRoadmap()
+      ]);
+
+      if (metricsData) setMetrics(metricsData);
+
+      // Find current month/week logic could be better, defaulting to first active
+      const activeMonth = roadmapData.find((m: any) => m.status === 'current') || roadmapData[0];
+      setCurrentMonth(activeMonth);
+
+    } catch (e) {
+      console.error("Failed to load dashboard data", e);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (loading) {
     return <div className="flex h-[50vh] items-center justify-center text-slate-500">Loading Dashboard...</div>
@@ -67,35 +72,43 @@ export default function Home() {
       </div>
 
       {/* Quick Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Revenue"
-          value={`₹${(metrics?.revenue || 0).toLocaleString()}`}
-          target={currentMonth?.revenue_target || "₹10L"}
-          icon={DollarSign}
-          color="text-green-400"
-        />
-        <StatsCard
-          title="Followers (IG)"
-          value={(metrics?.followers_ig || 0).toLocaleString()}
-          target="1M"
-          icon={Users}
-          color="text-purple-400"
-        />
-        <StatsCard
-          title="Products Live"
-          value={`${metrics?.products_live || 0}`}
-          target="8"
-          icon={Activity}
-          color="text-blue-400"
-        />
-        <StatsCard
-          title="Streak"
-          value={`${dayNumber} Days`}
-          target="365 Days"
-          icon={Calendar}
-          color="text-orange-400"
-        />
+      <div className="relative group/metrics">
+        <button
+          onClick={() => setShowMetricsModal(true)}
+          className="absolute -top-10 right-0 text-slate-500 hover:text-white flex items-center gap-2 text-sm opacity-0 group-hover/metrics:opacity-100 transition-opacity"
+        >
+          <Edit2 className="w-4 h-4" /> Edit Metrics
+        </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatsCard
+            title="Revenue"
+            value={`₹${(metrics?.revenue || 0).toLocaleString()}`}
+            target={currentMonth?.revenue_target || "₹10L"}
+            icon={DollarSign}
+            color="text-green-400"
+          />
+          <StatsCard
+            title="Followers (IG)"
+            value={(metrics?.followers_ig || 0).toLocaleString()}
+            target="1M"
+            icon={Users}
+            color="text-purple-400"
+          />
+          <StatsCard
+            title="Products Live"
+            value={`${metrics?.products_live || 0}`}
+            target="8"
+            icon={Activity}
+            color="text-blue-400"
+          />
+          <StatsCard
+            title="Streak"
+            value={`${dayNumber} Days`}
+            target="365 Days"
+            icon={Calendar}
+            color="text-orange-400"
+          />
+        </div>
       </div>
 
       {/* Main Content Grid */}
@@ -116,7 +129,13 @@ export default function Home() {
 
           {/* Current Roadmap Phase */}
           {currentMonth && (
-            <div className="glass-panel p-6">
+            <div className="glass-panel p-6 relative group">
+              <button
+                onClick={() => setShowMissionModal(true)}
+                className="absolute top-6 right-6 text-slate-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <Activity className="w-5 h-5 text-blue-400" />
@@ -173,6 +192,30 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      {showMetricsModal && (
+        <EditMetricsModal
+          metrics={metrics}
+          onSave={async (updates) => {
+            const saved = await api.updateMetrics(updates);
+            setMetrics(saved); // Update local state
+          }}
+          onClose={() => setShowMetricsModal(false)}
+        />
+      )}
+
+      {currentMonth && showMissionModal && (
+        <EditMissionModal
+          month={currentMonth}
+          onSave={async (updates) => {
+            await api.updateRoadmapMonth(currentMonth.id, updates);
+            // Reload full data to refresh state is easiest
+            fetchData();
+          }}
+          onClose={() => setShowMissionModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -186,9 +186,9 @@ export const api = {
     getSchedule: async () => {
         // Static schedule for now, or could make editable later
         return [
-            { id: '1', start_time: '06:00', end_time: '07:00', activity: 'Morning Routine', type: 'health' },
-            { id: '2', start_time: '07:00', end_time: '09:00', activity: 'Deep Work (Coding)', type: 'work' },
-            { id: '3', start_time: '18:00', end_time: '19:00', activity: 'Gym', type: 'health' },
+            { id: '1', start_time: '06:00', end_time: '07:00', activity: 'Morning Routine', type: 'health', category: 'Health' },
+            { id: '2', start_time: '07:00', end_time: '09:00', activity: 'Deep Work (Coding)', type: 'work', category: 'Work' },
+            { id: '3', start_time: '18:00', end_time: '19:00', activity: 'Gym', type: 'health', category: 'Health' },
         ];
     },
 
@@ -353,7 +353,14 @@ export const api = {
         return { streak: 0, weekProgress: 0, todayScore: 0, todayGrade: 'N/A' };
     },
 
-    updateDailyActivity: async () => {
+    updateDailyActivity: async (
+        scheduleCompleted: number,
+        scheduleTotal: number,
+        tasksCompleted: number,
+        tasksTotal: number,
+        focusTimeSeconds: number
+    ) => {
         // No-op for now in local mode or implement later
+        console.log("Updated daily activity", { scheduleCompleted, scheduleTotal, tasksCompleted, tasksTotal, focusTimeSeconds });
     }
 };
